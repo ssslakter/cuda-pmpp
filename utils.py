@@ -2,6 +2,7 @@
 
 import torch
 import matplotlib.pyplot as plt
+import re
 from torch.utils.cpp_extension import load_inline
 
 def show_img(x, figsize=(4,3), **kwargs):
@@ -41,3 +42,7 @@ def load_cuda(cuda_src, cpp_src, funcs, opt=True, verbose=False, name=None):
 def cdiv(a,b):
     "Int ceiling division of `a` over `b`"
     return (a+b-1)//b
+
+def get_sig(fname, src):
+    res = re.findall(rf'^(.+\s+{fname}\(.*?\))\s*{{?\s*$', src, re.MULTILINE)
+    return res[0]+';' if res else None

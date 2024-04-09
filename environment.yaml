@@ -1,0 +1,20 @@
+name: /home/slakter/coding/cuda-pmpp/.conda
+channels:
+  - nvidia
+  - pytorch
+  - nvidia/label/cuda-12.1.0
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - cuda
+  - torchvision 
+  - torchaudio 
+  - pytorch-cuda=12.1
+  - numba
+  - jupyter
+  - matplotlib
+  - pip:
+      - ninja
+prefix: /home/slakter/coding/cuda-pmpp/.conda
