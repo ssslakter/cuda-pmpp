@@ -1,9 +1,10 @@
-## copied from https://github.com/cuda-mode/lectures
+## partially copied from https://github.com/cuda-mode/lectures
 
 import torch
+from pathlib import Path
 import matplotlib.pyplot as plt
 import re, sys, gc, traceback
-from torch.utils.cpp_extension import load_inline
+from torch.utils.cpp_extension import load_inline, load
 
 def show_img(x, figsize=(4,3), **kwargs):
     "Display HW or CHW format image `x`"
@@ -38,6 +39,14 @@ def load_cuda(cuda_src, cpp_src, funcs, opt=True, verbose=False, name=None):
     flags = "-O3 -Xptxas -O3 -Xcompiler -O3" if opt else "-O0 -Xptxas -O0 -Xcompiler -O0"
     return load_inline(cuda_sources=[cuda_src], cpp_sources=[cpp_src], functions=funcs,
                        extra_cuda_cflags=[flags], verbose=verbose, name=name)
+    
+def load_cu_file(cu_file, opt=True, verbose=False, name=None):
+    "Simple wrapper for torch.utils.cpp_extension.load_inline"
+    if name is None: name = Path(cu_file).stem
+    flags = "-O3 -Xptxas -O3 -Xcompiler -O3" if opt else "-O0 -Xptxas -O0 -Xcompiler -O0"
+    return load(sources=[cu_file], extra_include_paths=['../','./'],
+                extra_cuda_cflags=[flags], verbose=verbose, name=name)    
+
 
 def cdiv(a,b):
     "Int ceiling division of `a` over `b`"
