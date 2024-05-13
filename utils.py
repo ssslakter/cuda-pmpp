@@ -33,19 +33,19 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
 __host__ __device__ inline unsigned int cdiv(unsigned int a, unsigned int b) { return (a+b-1)/b;}
 '''
 
-def load_cuda(cuda_src, cpp_src, funcs, opt=True, verbose=False, name=None):
+def load_cuda(cuda_src, cpp_src, funcs, opt=True, verbose=False, name=None, build_dir='./build'):
     "Simple wrapper for torch.utils.cpp_extension.load_inline"
     if name is None: name = funcs[0]
     flags = "-O3 -Xptxas -O3 -Xcompiler -O3" if opt else "-O0 -Xptxas -O0 -Xcompiler -O0"
     return load_inline(cuda_sources=[cuda_src], cpp_sources=[cpp_src], functions=funcs,
-                       extra_cuda_cflags=[flags], verbose=verbose, name=name)
+                       extra_cuda_cflags=[flags], verbose=verbose, name=name, build_directory=build_dir)
     
-def load_cu_file(cu_file, opt=True, verbose=False, name=None):
-    "Simple wrapper for torch.utils.cpp_extension.load_inline"
+def load_cu_file(cu_file, opt=True, verbose=False, name=None, build_dir='./build'):
+    "Simple wrapper for torch.utils.cpp_extension.load"
     if name is None: name = Path(cu_file).stem
     flags = "-O3 -Xptxas -O3 -Xcompiler -O3" if opt else "-O0 -Xptxas -O0 -Xcompiler -O0"
     return load(sources=[cu_file], extra_include_paths=['../','./'],
-                extra_cuda_cflags=[flags], verbose=verbose, name=name)    
+                extra_cuda_cflags=[flags], verbose=verbose, name=name, build_directory=build_dir)    
 
 
 def cdiv(a,b):
