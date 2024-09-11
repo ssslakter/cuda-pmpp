@@ -44,6 +44,7 @@ def load_cu_file(cu_file, opt=True, verbose=False, name=None, build_dir='./build
     "Simple wrapper for torch.utils.cpp_extension.load"
     if name is None: name = Path(cu_file).stem
     flags = "-O3 -Xptxas -O3 -Xcompiler -O3" if opt else "-O0 -Xptxas -O0 -Xcompiler -O0"
+    Path(build_dir).mkdir(parents=True, exist_ok=True)
     return load(sources=[cu_file], extra_include_paths=['../','./'],
                 extra_cuda_cflags=[flags], verbose=verbose, name=name, build_directory=build_dir)    
 
