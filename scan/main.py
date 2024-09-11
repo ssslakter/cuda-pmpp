@@ -1,0 +1,33 @@
+import torch
+from pathlib import Path
+import os, sys
+sys.path.insert(0, '..')
+sys.path.insert(0, '.')
+from utils import *
+
+
+print('start compiling')
+mod = load_cu_file(Path(__file__).parent/'scan.cu')
+print('compiled module')
+# init convolution and input matrix
+x = torch.ones(2048).contiguous().cuda()
+
+print(mod.scan(x))
+
+# n_iters = 20
+# warmup_iters = 5
+# for i in range(n_iters):
+
+#     # start profiling after 10 warmup iterations
+#     if i == warmup_iters: torch.cuda.cudart().cudaProfilerStart()
+
+#     # push range for current iteration
+#     if i >= warmup_iters: torch.cuda.nvtx.range_push("conv_shared{}".format(i))
+#     out = mod.scan(x)
+#     if i >= warmup_iters: torch.cuda.nvtx.range_pop()
+    
+#     if i >= warmup_iters: torch.cuda.nvtx.range_push("conv{}".format(i))
+#     out = mod.scan(x)
+#     if i >= warmup_iters: torch.cuda.nvtx.range_pop()
+
+# torch.cuda.cudart().cudaProfilerStop()
