@@ -1,7 +1,6 @@
 #include <utils.cuh>
 
-#define SECTION_SIZE 1024 
-
+#define SECTION_SIZE 1024
 
 __global__ void Brent_Kung_scan_kernel(float *X, float *Y, unsigned int N)
 {
@@ -36,51 +35,83 @@ __global__ void Brent_Kung_scan_kernel(float *X, float *Y, unsigned int N)
         Y[i + blockDim.x] = XY[threadIdx.x + blockDim.x];
 }
 
-
 __global__ void coarsened_scan_kernel(float *X, float *Y, unsigned int N)
 {
-    unsigned int S = SECTION_SIZE/blockDim.x;
+    unsigned int S = SECTION_SIZE / blockDim.x;
     __shared__ float XY[SECTION_SIZE];
     unsigned int i = blockIdx.x * SECTION_SIZE + threadIdx.x;
-    for (unsigned int j = 0; j < S; j++)
+    for (unsigned int j = 0; j < SECTION_SIZE; j += blockDim.x)
     {
-        if (i+j*blockDim.x < N)
-            XY[threadIdx.x+j*blockDim.x] = X[i+j*blockDim.x];
+        if (i + j < N)
+            XY[threadIdx.x + j] = X[i + j];
     }
     __syncthreads();
-    // single-threaded scan of each S
-    for (unsigned int j = 0; j < S-1; j++)
+    // Phase 1. single-threaded scan of each S
+    for (unsigned int j = 0; j < S - 1; j++)
     {
-        XY[S*threadIdx.x+j+1] = XY[S*threadIdx.x+j] + XY[S*threadIdx.x+j+1]; 
+        XY[S * threadIdx.x + j + 1] = XY[S * threadIdx.x + j] + XY[S * threadIdx.x + j + 1];
     }
     __syncthreads();
-    for (unsigned int j = 0; j < S; j++)
+    // Phase 2. Brent-Kung scan of the last element of each S
+    for (unsigned int stride = 1; stride <= blockDim.x; stride *= 2)
     {
-        if (i+j*blockDim.x < N)
-            Y[i+j*blockDim.x] = XY[threadIdx.x+j*blockDim.x];
+        __syncthreads();
+        unsigned int index = S * (threadIdx.x + 1) * 2 * stride - 1;
+        if (index < SECTION_SIZE)
+        {
+            XY[index] += XY[index - S * stride];
+        }
+    }
+    for (int stride = blockDim.x / 2; stride > 0; stride /= 2)
+    {
+        __syncthreads();
+        unsigned int index = S * (threadIdx.x + 1) * stride * 2 - 1;
+        if (index + stride < SECTION_SIZE)
+        {
+            XY[index + S * stride] += XY[index];
+        }
+    }
+    __syncthreads();
+    // Phase 3. Sum the last element of each S with each element of the next S
+    if (threadIdx.x != 0)
+    {
+        for (unsigned int j = 0; j < S - 1; j++)
+        {
+            XY[S * threadIdx.x + j] += XY[S * threadIdx.x - 1];
+        }
+    }
+    __syncthreads();
+    for (unsigned int j = 0; j < SECTION_SIZE; j += blockDim.x)
+    {
+        if (i + j < N)
+            Y[i + j] = XY[threadIdx.x + j];
     }
 }
 
-torch::Tensor scan(torch::Tensor X)
+torch::Tensor scan(torch::Tensor X, bool is_bk = false)
 {
-    // CHECK_INPUT(X);
+    CHECK_INPUT(X);
     auto Y = torch::zeros_like(X);
     auto N = X.size(0);
     auto num_blocks = cdiv(N, SECTION_SIZE);
-    coarsened_scan_kernel<<<num_blocks, 64>>>(X.data_ptr<float>(), Y.data_ptr<float>(), N);
-    // C10_CUDA_KERNEL_LAUNCH_CHECK();
+    if (is_bk)
+        Brent_Kung_scan_kernel<<<num_blocks, SECTION_SIZE / 2>>>(X.data_ptr<float>(), Y.data_ptr<float>(), N);
+    else
+        coarsened_scan_kernel<<<num_blocks, 64>>>(X.data_ptr<float>(), Y.data_ptr<float>(), N);
+    C10_CUDA_KERNEL_LAUNCH_CHECK();
     return Y;
 }
 
-int main()
-{
-    auto x = torch::ones({SECTION_SIZE}).cuda();
-    auto y = scan(x);
-    std::cout << y << std::endl;
-    return 0;
-}
-
-// PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
+// int main()
 // {
-//     m.def("scan", &scan, "1D scan (prefix sum) of a tensor");
+//     auto x = torch::ones({SECTION_SIZE}).cuda();
+//     auto y = scan(x);
+//     std::cout << y << std::endl;
+//     return 0;
 // }
+
+PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
+{
+    m.def("scan", &scan, "1D scan (prefix sum) of a tensor",
+          pybind11::arg("X"), pybind11::arg("is_bk") = false);
+}
