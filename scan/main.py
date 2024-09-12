@@ -22,12 +22,12 @@ for i in range(n_iters):
     if i == warmup_iters: torch.cuda.cudart().cudaProfilerStart()
 
     # push range for current iteration
-    if i >= warmup_iters: torch.cuda.nvtx.range_push("conv_shared{}".format(i))
+    if i >= warmup_iters: torch.cuda.nvtx.range_push("scan_coal{}".format(i))
     out = mod.scan(x, False)
     if i >= warmup_iters: torch.cuda.nvtx.range_pop()
     
-    if i >= warmup_iters: torch.cuda.nvtx.range_push("conv{}".format(i))
-    out = mod.scan(x, False)
+    if i >= warmup_iters: torch.cuda.nvtx.range_push("scan_bk{}".format(i))
+    out = mod.scan(x, True)
     if i >= warmup_iters: torch.cuda.nvtx.range_pop()
 
 torch.cuda.cudart().cudaProfilerStop()
