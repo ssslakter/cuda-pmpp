@@ -35,7 +35,8 @@ __global__ void Brent_Kung_scan_kernel(float *X, float *Y, unsigned int N)
         Y[i + blockDim.x] = XY[threadIdx.x + blockDim.x];
 }
 
-__global__ void coarsened_scan_kernel(float *X, float *Y, unsigned int N)
+template <bool UseP>
+__global__ void coarsened_scan_kernel(float *X, float *Y, unsigned int N, float *P = nullptr)
 {
     unsigned int S = SECTION_SIZE / blockDim.x;
     __shared__ float XY[SECTION_SIZE];
@@ -86,9 +87,23 @@ __global__ void coarsened_scan_kernel(float *X, float *Y, unsigned int N)
         if (i + j < N)
             Y[i + j] = XY[threadIdx.x + j];
     }
+    if constexpr (UseP)
+    {
+        if (threadIdx.x == blockDim.x - 1)
+        {
+            P[blockIdx.x] = XY[SECTION_SIZE - 1];
+        }
+    }
 }
 
-torch::Tensor scan(torch::Tensor X, bool is_bk = false)
+__global__ void scan_kernel_add(float *P, float *Y, unsigned int N)
+{
+    unsigned int i = (blockIdx.x + 1) * SECTION_SIZE + threadIdx.x;
+    if (i < N)
+        Y[i] += P[blockIdx.x];
+}
+
+torch::Tensor scan_block(torch::Tensor X, bool is_bk = false)
 {
     CHECK_INPUT(X);
     auto Y = torch::zeros_like(X);
@@ -97,7 +112,26 @@ torch::Tensor scan(torch::Tensor X, bool is_bk = false)
     if (is_bk)
         Brent_Kung_scan_kernel<<<num_blocks, SECTION_SIZE / 2>>>(X.data_ptr<float>(), Y.data_ptr<float>(), N);
     else
-        coarsened_scan_kernel<<<num_blocks, 64>>>(X.data_ptr<float>(), Y.data_ptr<float>(), N);
+        coarsened_scan_kernel<false><<<num_blocks, 64>>>(X.data_ptr<float>(), Y.data_ptr<float>(), N);
+    C10_CUDA_KERNEL_LAUNCH_CHECK();
+    return Y;
+}
+
+torch::Tensor scan(torch::Tensor X, bool is_bk = false)
+{
+    CHECK_INPUT(X);
+    auto Y = torch::zeros_like(X);
+    auto N = X.size(0);
+    auto num_blocks = cdiv(N, SECTION_SIZE);
+    if (num_blocks <= 1)
+    {
+        return scan_block(X, is_bk);
+    }
+    auto P = torch::zeros({num_blocks}, X.options());
+    coarsened_scan_kernel<true><<<num_blocks, 64>>>(X.data_ptr<float>(), Y.data_ptr<float>(), N, P.data_ptr<float>());
+
+    P = (num_blocks > SECTION_SIZE) ? scan(P, is_bk) :scan_block(P, is_bk);
+    scan_kernel_add<<<num_blocks - 1, SECTION_SIZE>>>(P.data_ptr<float>(), Y.data_ptr<float>(), N);
     C10_CUDA_KERNEL_LAUNCH_CHECK();
     return Y;
 }
